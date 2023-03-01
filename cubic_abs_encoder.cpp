@@ -25,6 +25,8 @@ const uint8_t *READ_COMMAND = 0x00;
 #define TIME_BYTES 3
 #define ENCODER_BITS 16
 
+#define ERR_VAL 0x7fff
+
 #define DELAY 1
 
 void print_vals(int16_t *enc_vals) {
@@ -48,21 +50,24 @@ void read_encoder(uint16_t *enc_val, uint8_t enc_num) {
 }
 
 // パリティチェックを行う
-// K0 K1 D14 D13 D12 D11 D10 D9 D8 D7 D6 D5 D4 D3 D2 D1 の16ビットのうち，K0とK1はパリティビット
-// K0 = !(D14 xor D12 xor D10 xor D8 xor D6 xor D4 xor D2)
-// K1 = !(D13 xor D11 xor D9 xor D7 xor D5 xor D3 xor D1)
-// 未完成
-bool parity_check(int16_t *enc_val) {
-    bool *bit = (bool*)enc_val;
-    if (bit[0] == !(bit[2] ^ bit[4] ^ bit[6] ^ bit[8] ^ bit[10] ^ bit[12]) &&
-        bit[1] == !(bit[3] ^ bit[5] ^ bit[7] ^ bit[9] ^ bit[11] ^ bit[13])) {
+// | K1 K0 D14 D13 D12 D11 D10 D9 | D8 D7 D6 D5 D4 D3 D2 D1 | の16ビットのうち，K0とK1はパリティビット
+// K1 = !(D14 xor D12 xor D10 xor D8 xor D6 xor D4 xor D2)
+// K0 = !(D13 xor D11 xor D9 xor D7 xor D5 xor D3 xor D1)
+bool parity_check(int16_t enc_val) {
+    bool bit[16];
+    for (int i = 0; i < 16; i++) {
+        bit[i] = (enc_val >> i) & 1;
+    }
+    
+    if (bit[15] == !(bit[13] ^ bit[11] ^ bit[9] ^ bit[7] ^ bit[5] ^ bit[3] ^ bit[1]) &&
+        bit[14] == !(bit[12] ^ bit[10] ^ bit[8] ^ bit[6] ^ bit[4] ^ bit[2] ^ bit[0])) {
         return true;
     }
     return false;
 }
 
 // パリティビットを除去する
-int16_t remove_parity_bit(int16_t enc_val) {
+uint16_t remove_parity_bit(uint16_t enc_val) {
     return enc_val & 0x3fff;
 }
 
@@ -96,6 +101,7 @@ int main()
         スレーブ動作の際にSSがHIGHのときもMISOがLOWになってしまうSPIライブラリのバグがあるため，
         MISOとSSをGPIOピンとして初期化し，SSの立ち下がりエッジで割り込み処理をしSPI通信を行う
     */
+    ///*
     gpio_set_function(PIN_MOSI0, GPIO_FUNC_SPI);
     //gpio_set_function(PIN_SS0,   GPIO_FUNC_SPI);
     gpio_set_function(PIN_SCK0,  GPIO_FUNC_SPI);
@@ -113,7 +119,7 @@ int main()
     spi_set_slave(SPI_PORT0, true);
 
     gpio_set_irq_enabled_with_callback(PIN_SS0, GPIO_IRQ_EDGE_FALL, true, spi_receive);
-
+    //*/
     spi_init(SPI_PORT1, SPI_FREQ1);
     gpio_set_function(PIN_MOSI1, GPIO_FUNC_SPI);
     gpio_set_function(PIN_SCK1,  GPIO_FUNC_SPI);
@@ -135,14 +141,19 @@ int main()
         // エンコーダの値を読み込む
         for (int i = 0; i < ENCODER_NUM; i++) {
             read_encoder(&enc_vals[i], i);
-            enc_vals[i] = remove_parity_bit(enc_vals[i]);
-            // LEDを点灯させる
-            if (enc_vals[i] != 0) {
+            //printf("%d ", parity_check(enc_vals[i]));
+            if (parity_check(enc_vals[i])) {
+                // LEDを点灯する
                 gpio_put(PIN_LED[i], 1);
             } else {
+                // LEDを消灯する
                 gpio_put(PIN_LED[i], 0);
+                // エラー値を代入する
+                enc_vals[i] = ERR_VAL;
             }
+            //enc_vals[i] = remove_parity_bit(enc_vals[i]);  
         }
+        //printf(" ");
         // usb通信は遅いため普段はコメントアウト
         //print_vals((int16_t*)enc_vals);
 

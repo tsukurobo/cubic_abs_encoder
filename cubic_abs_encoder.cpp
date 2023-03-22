@@ -11,23 +11,22 @@
 
 #define SPI_PORT1 spi1
 #define PIN_MOSI1 11
-const uint8_t PIN_SS1[] = {27, 16, 17, 18, 4, 5, 6, 7};
-#define PIN_SS_LCD 15
+const uint8_t PIN_SS1[] = {6, 24, 17, 10, 4, 22, 27, 19};
 #define PIN_SCK1  26
 #define PIN_MISO1 8
 
-#define SPI_FREQ0 400000
+#define SPI_FREQ0 4000000
 #define SPI_FREQ1 2000000
 
 #define ENCODER_NUM 8
-const uint8_t PIN_LED[] = {9, 12, 20, 19, 10, 13, 21, 22};
+const uint8_t PIN_LED[] = {7, 25, 18, 12, 5, 23, 16, 9};
 const uint8_t *READ_COMMAND = 0x00;
 #define TIME_BYTES 3
 #define ENCODER_BITS 16
 
 #define ERR_VAL 0x7fff
 
-#define DELAY 1
+#define DELAY_US 100
 
 void print_vals(int16_t *enc_vals) {
     for (int i = 0; i < ENCODER_NUM; i++) {
@@ -74,59 +73,26 @@ uint16_t remove_parity_bit(uint16_t enc_val) {
 #define PIN_RS 14
 
 uint16_t enc_vals[ENCODER_NUM];
-void spi_receive(uint gpio, uint32_t events) {
-    if (gpio == PIN_SS0 && events == GPIO_IRQ_EDGE_FALL) {
-        gpio_set_irq_enabled(PIN_SS0, GPIO_IRQ_EDGE_FALL, false);
-
-        gpio_set_function(PIN_MISO0, GPIO_FUNC_SPI);
-        gpio_set_function(PIN_SS0,   GPIO_FUNC_SPI);
-
-        spi_write_blocking(SPI_PORT0, (uint8_t*)enc_vals, ENCODER_BITS);
-
-        gpio_init(PIN_MISO0);
-        gpio_set_dir(PIN_MISO0, GPIO_IN);
-        gpio_init(PIN_SS0);
-        gpio_set_dir(PIN_SS0, GPIO_IN);
-        gpio_pull_up(PIN_SS0);
-
-        gpio_set_irq_enabled(PIN_SS0, GPIO_IRQ_EDGE_FALL, true);
-    }
-}
 
 int main()
 {
     stdio_init_all();
     // SPIピンの設定
-    /*
-        スレーブ動作の際にSSがHIGHのときもMISOがLOWになってしまうSPIライブラリのバグがあるため，
-        MISOとSSをGPIOピンとして初期化し，SSの立ち下がりエッジで割り込み処理をしSPI通信を行う
-    */
-    ///*
     gpio_set_function(PIN_MOSI0, GPIO_FUNC_SPI);
-    //gpio_set_function(PIN_SS0,   GPIO_FUNC_SPI);
+    gpio_set_function(PIN_SS0,   GPIO_FUNC_SPI);
     gpio_set_function(PIN_SCK0,  GPIO_FUNC_SPI);
-    //gpio_set_function(PIN_MISO0, GPIO_FUNC_SPI);
-    gpio_init(PIN_SS0);
-    gpio_set_dir(PIN_SS0, GPIO_IN);
-    gpio_pull_up(PIN_SS0);
-    gpio_init(PIN_MISO0);
-    gpio_set_dir(PIN_MISO0, GPIO_IN);
+    gpio_set_function(PIN_MISO0, GPIO_FUNC_SPI);
 
     // SPI初期化(周波数を4MHzに設定)
     spi_init(SPI_PORT0, SPI_FREQ0);
     spi_set_format(SPI_PORT0, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
     // スレーブでSPI通信開始
     spi_set_slave(SPI_PORT0, true);
-
-    gpio_set_irq_enabled_with_callback(PIN_SS0, GPIO_IRQ_EDGE_FALL, true, spi_receive);
-    //*/
+    
     spi_init(SPI_PORT1, SPI_FREQ1);
     gpio_set_function(PIN_MOSI1, GPIO_FUNC_SPI);
     gpio_set_function(PIN_SCK1,  GPIO_FUNC_SPI);
     gpio_set_function(PIN_MISO1, GPIO_FUNC_SPI);
-    gpio_init(PIN_SS_LCD);
-    gpio_set_dir(PIN_SS_LCD, GPIO_OUT);
-    gpio_put(PIN_SS_LCD, 1);
     
     for (int i = 0; i < ENCODER_NUM; i++) {
         gpio_init(PIN_SS1[i]);
@@ -157,7 +123,9 @@ int main()
         // usb通信は遅いため普段はコメントアウト
         //print_vals((int16_t*)enc_vals);
 
-        sleep_ms(DELAY);
+        spi_write_blocking(SPI_PORT0, (uint8_t*)enc_vals, ENCODER_BITS);
+
+        sleep_us(DELAY_US);
     }
     
     return 0;

@@ -48,6 +48,20 @@ void read_encoder(uint16_t *enc_val, uint8_t enc_num) {
     gpio_put(PIN_SS1[enc_num], 1);
 }
 
+void set_zero_point(uint8_t enc_num){
+    // スレーブ選択
+    gpio_put(PIN_SS1[enc_num], 0);
+    sleep_us(TIME_BYTES);
+    // データ送信
+    spi_write_blocking(SPI_PORT1, READ_COMMAND, 1);
+    sleep_us(TIME_BYTES);
+    spi_write_blocking(SPI_PORT1, (const uint8_t *)0x70, 1);
+    sleep_us(TIME_BYTES);
+    sleep_us(250000);
+    // スレーブ解除
+    gpio_put(PIN_SS1[enc_num], 1);
+}
+
 // パリティチェックを行う
 // | K1 K0 D14 D13 D12 D11 D10 D9 | D8 D7 D6 D5 D4 D3 D2 D1 | の16ビットのうち，K0とK1はパリティビット
 // K1 = !(D14 xor D12 xor D10 xor D8 xor D6 xor D4 xor D2)
@@ -57,7 +71,7 @@ bool parity_check(int16_t enc_val) {
     for (int i = 0; i < 16; i++) {
         bit[i] = (enc_val >> i) & 1;
     }
-    
+
     if (bit[15] == !(bit[13] ^ bit[11] ^ bit[9] ^ bit[7] ^ bit[5] ^ bit[3] ^ bit[1]) &&
         bit[14] == !(bit[12] ^ bit[10] ^ bit[8] ^ bit[6] ^ bit[4] ^ bit[2] ^ bit[0])) {
         return true;
@@ -88,12 +102,12 @@ int main()
     spi_set_format(SPI_PORT0, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
     // スレーブでSPI通信開始
     spi_set_slave(SPI_PORT0, true);
-    
+
     spi_init(SPI_PORT1, SPI_FREQ1);
     gpio_set_function(PIN_MOSI1, GPIO_FUNC_SPI);
     gpio_set_function(PIN_SCK1,  GPIO_FUNC_SPI);
     gpio_set_function(PIN_MISO1, GPIO_FUNC_SPI);
-    
+
     for (int i = 0; i < ENCODER_NUM; i++) {
         gpio_init(PIN_SS1[i]);
         gpio_set_dir(PIN_SS1[i], GPIO_OUT);
@@ -101,6 +115,10 @@ int main()
         gpio_init(PIN_LED[i]);
         gpio_set_dir(PIN_LED[i], GPIO_OUT);
         gpio_put(PIN_LED[i], 0);
+    }
+
+    for (int i = 0; i < ENCODER_NUM; i++) {
+        // set_zero_point(i);s
     }
 
     while(true) {
@@ -117,7 +135,7 @@ int main()
                 // エラー値を代入する
                 enc_vals[i] = ERR_VAL;
             }
-            //enc_vals[i] = remove_parity_bit(enc_vals[i]);  
+            //enc_vals[i] = remove_parity_bit(enc_vals[i]);
         }
         //printf(" ");
         // usb通信は遅いため普段はコメントアウト
@@ -127,6 +145,6 @@ int main()
 
         sleep_us(DELAY_US);
     }
-    
+
     return 0;
 }

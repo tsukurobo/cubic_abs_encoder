@@ -21,6 +21,7 @@ const uint8_t PIN_SS1[] = {6, 24, 17, 10, 4, 22, 27, 19};
 #define ENCODER_NUM 8
 const uint8_t PIN_LED[] = {7, 25, 18, 12, 5, 23, 16, 9};
 const uint8_t *READ_COMMAND = 0x00;
+// const uint8_t *SET_ZERO_COMMAND = 0x70; 
 #define TIME_BYTES 3
 #define ENCODER_BITS 16
 
@@ -53,13 +54,13 @@ void set_zero_point(uint8_t enc_num){
     gpio_put(PIN_SS1[enc_num], 0);
     sleep_us(TIME_BYTES);
     // データ送信
-    spi_write_blocking(SPI_PORT1, READ_COMMAND, 1);
+    spi_write_blocking(SPI_PORT1, (const uint8_t *)0x00, 1);
     sleep_us(TIME_BYTES);
-    spi_write_blocking(SPI_PORT1, (const uint8_t *)0x70, 1);
+    spi_write_blocking(SPI_PORT1, (const uint8_t *)0x60, 1);
     sleep_us(TIME_BYTES);
-    sleep_us(250000);
     // スレーブ解除
     gpio_put(PIN_SS1[enc_num], 1);
+    sleep_us(250000000);
 }
 
 // パリティチェックを行う
@@ -117,8 +118,8 @@ int main()
         gpio_put(PIN_LED[i], 0);
     }
 
-    for (int i = 0; i < ENCODER_NUM; i++) {
-        // set_zero_point(i);s
+    for (int i = 0; i < 1; i++) {
+        // set_zero_point(i);
     }
 
     while(true) {

@@ -3,6 +3,9 @@
 #include "hardware/spi.h"
 #include "hardware/gpio.h"
 
+/* multi-turnエンコーダを使う場合はコメントアウトを外す */
+// #define USE_MULTI_TURN 
+
 #define SPI_PORT0 spi0
 #define PIN_MOSI0 0
 #define PIN_SS0   1
@@ -38,6 +41,19 @@ void print_vals(int16_t *enc_vals) {
     printf("\n");
 }
 
+void read_encoder(uint16_t *enc_val, uint8_t enc_num){
+	// スレーブ選択
+	gpio_put(PIN_SS1[enc_num], 0);
+	sleep_us(TIME_BYTES);
+	// データ送信
+	spi_write_read_blocking(SPI_PORT1, &READ_COMMAND, (uint8_t*)enc_val + 1, 1);
+	sleep_us(TIME_BYTES);
+	spi_write_read_blocking(SPI_PORT1, &READ_COMMAND, (uint8_t*)enc_val, 1);
+	sleep_us(TIME_BYTES);
+	// スレーブ解除
+	gpio_put(PIN_SS1[enc_num], 1);
+}
+
 void read_encoder(uint16_t *enc_val, uint16_t *turn_val, uint8_t enc_num) {
     // スレーブ選択
     gpio_put(PIN_SS1[enc_num], 0);
@@ -47,6 +63,7 @@ void read_encoder(uint16_t *enc_val, uint16_t *turn_val, uint8_t enc_num) {
     sleep_us(TIME_BYTES);
     spi_write_read_blocking(SPI_PORT1, &READ_TURN_COMMAND, (uint8_t*)enc_val, 1);
     sleep_us(TIME_TURNS);
+	// 回転回数の読み込み
 	spi_write_read_blocking(SPI_PORT1, &READ_COMMAND, (uint8_t*)turn_val + 1, 1);
     sleep_us(TIME_BYTES);
     spi_write_read_blocking(SPI_PORT1, &READ_COMMAND, (uint8_t*)turn_val, 1);
@@ -134,7 +151,11 @@ int main()
     while(true) {
         // エンコーダの値を読み込む
         for (int i = 0; i < ENCODER_NUM; i++) {
+			#ifdef USE_MULTI_TURN
             read_encoder(&enc_vals[i], &turn_vals[i], i);
+			#else
+			read_encoder(&enc_vals[i], i);
+			#endif
             //printf("%d ", parity_check(enc_vals[i]));
             if (parity_check(enc_vals[i])) {
                 // LEDを点灯する
@@ -145,16 +166,22 @@ int main()
                 // エラー値を代入する
                 enc_vals[i] = ERR_VAL;
             }
-            // enc_vals[i] = remove_parity_bit(enc_vals[i]);
-            // turn_vals[i] = remove_parity_bit(turn_vals[i]);
+            enc_vals[i] = remove_parity_bit(enc_vals[i]);
+            turn_vals[i] = remove_parity_bit(turn_vals[i]);
         }
         //printf(" ");
         // usb通信は遅いため普段はコメントアウト
         // print_vals((int16_t*)enc_vals);
 		
+		#ifdef USE_MULTI_TURN
 		// printf("%d, %d\n", enc_vals[3], (int16_t)turn_vals[3]);
-
+		/**
+		 * TODO: ここにマルチターンエンコーダの値を送信する処理を書く
+		 */
+		#else
+		// printf("%d\n", enc_vals[3]);
         spi_write_blocking(SPI_PORT0, (uint8_t*)enc_vals, ENCODER_BITS);
+		#endif
 
         sleep_us(DELAY_US);
     }

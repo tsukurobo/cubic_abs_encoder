@@ -20,9 +20,11 @@ const uint8_t PIN_SS1[] = {6, 24, 17, 10, 4, 22, 27, 19};
 
 #define ENCODER_NUM 8
 const uint8_t PIN_LED[] = {7, 25, 18, 12, 5, 23, 16, 9};
-const uint8_t *READ_COMMAND = 0x00;
-// const uint8_t *SET_ZERO_COMMAND = 0x70; 
+const uint8_t READ_COMMAND = 0x00;
+const uint8_t READ_TURN_COMMAND = 0xA0;
+const uint8_t SET_ZERO_COMMAND = 0x70; 
 #define TIME_BYTES 3
+#define TIME_TURNS 40
 #define ENCODER_BITS 16
 
 #define ERR_VAL 0x7fff
@@ -36,31 +38,36 @@ void print_vals(int16_t *enc_vals) {
     printf("\n");
 }
 
-void read_encoder(uint16_t *enc_val, uint8_t enc_num) {
+void read_encoder(uint16_t *enc_val, uint16_t *turn_val, uint8_t enc_num) {
     // スレーブ選択
     gpio_put(PIN_SS1[enc_num], 0);
     sleep_us(TIME_BYTES);
     // データ送信
-    spi_write_read_blocking(SPI_PORT1, READ_COMMAND, (uint8_t*)enc_val + 1, 1);
+    spi_write_read_blocking(SPI_PORT1, &READ_COMMAND, (uint8_t*)enc_val + 1, 1);
     sleep_us(TIME_BYTES);
-    spi_write_read_blocking(SPI_PORT1, READ_COMMAND, (uint8_t*)enc_val, 1);
+    spi_write_read_blocking(SPI_PORT1, &READ_TURN_COMMAND, (uint8_t*)enc_val, 1);
+    sleep_us(TIME_TURNS);
+	spi_write_read_blocking(SPI_PORT1, &READ_COMMAND, (uint8_t*)turn_val + 1, 1);
+    sleep_us(TIME_BYTES);
+    spi_write_read_blocking(SPI_PORT1, &READ_COMMAND, (uint8_t*)turn_val, 1);
     sleep_us(TIME_BYTES);
     // スレーブ解除
     gpio_put(PIN_SS1[enc_num], 1);
 }
 
+// single-turnエンコーダ限定
 void set_zero_point(uint8_t enc_num){
     // スレーブ選択
     gpio_put(PIN_SS1[enc_num], 0);
     sleep_us(TIME_BYTES);
     // データ送信
-    spi_write_blocking(SPI_PORT1, (const uint8_t *)0x00, 1);
+    spi_write_blocking(SPI_PORT1, &READ_COMMAND, 1);
     sleep_us(TIME_BYTES);
-    spi_write_blocking(SPI_PORT1, (const uint8_t *)0x60, 1);
+    spi_write_blocking(SPI_PORT1, &SET_ZERO_COMMAND, 1);
     sleep_us(TIME_BYTES);
     // スレーブ解除
     gpio_put(PIN_SS1[enc_num], 1);
-    sleep_us(250000000);
+    sleep_us(250000);
 }
 
 // パリティチェックを行う
@@ -88,6 +95,7 @@ uint16_t remove_parity_bit(uint16_t enc_val) {
 #define PIN_RS 14
 
 uint16_t enc_vals[ENCODER_NUM];
+uint16_t turn_vals[ENCODER_NUM];
 
 int main()
 {
@@ -105,6 +113,7 @@ int main()
     spi_set_slave(SPI_PORT0, true);
 
     spi_init(SPI_PORT1, SPI_FREQ1);
+    spi_set_format(SPI_PORT1, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
     gpio_set_function(PIN_MOSI1, GPIO_FUNC_SPI);
     gpio_set_function(PIN_SCK1,  GPIO_FUNC_SPI);
     gpio_set_function(PIN_MISO1, GPIO_FUNC_SPI);
@@ -118,14 +127,14 @@ int main()
         gpio_put(PIN_LED[i], 0);
     }
 
-    for (int i = 0; i < 1; i++) {
+    for (int i = 0; i < ENCODER_NUM; i++) {
         // set_zero_point(i);
     }
 
     while(true) {
         // エンコーダの値を読み込む
         for (int i = 0; i < ENCODER_NUM; i++) {
-            read_encoder(&enc_vals[i], i);
+            read_encoder(&enc_vals[i], &turn_vals[i], i);
             //printf("%d ", parity_check(enc_vals[i]));
             if (parity_check(enc_vals[i])) {
                 // LEDを点灯する
@@ -136,11 +145,14 @@ int main()
                 // エラー値を代入する
                 enc_vals[i] = ERR_VAL;
             }
-            //enc_vals[i] = remove_parity_bit(enc_vals[i]);
+            // enc_vals[i] = remove_parity_bit(enc_vals[i]);
+            // turn_vals[i] = remove_parity_bit(turn_vals[i]);
         }
         //printf(" ");
         // usb通信は遅いため普段はコメントアウト
-        //print_vals((int16_t*)enc_vals);
+        // print_vals((int16_t*)enc_vals);
+		
+		// printf("%d, %d\n", enc_vals[3], (int16_t)turn_vals[3]);
 
         spi_write_blocking(SPI_PORT0, (uint8_t*)enc_vals, ENCODER_BITS);
 

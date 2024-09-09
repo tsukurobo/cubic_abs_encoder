@@ -166,8 +166,8 @@ int main()
                 // エラー値を代入する
                 enc_vals[i] = ERR_VAL;
             }
-            enc_vals[i] = remove_parity_bit(enc_vals[i]);
-            turn_vals[i] = remove_parity_bit(turn_vals[i]);
+            // enc_vals[i] = remove_parity_bit(enc_vals[i]);
+            // turn_vals[i] = remove_parity_bit(turn_vals[i]);
         }
         //printf(" ");
         // usb通信は遅いため普段はコメントアウト
